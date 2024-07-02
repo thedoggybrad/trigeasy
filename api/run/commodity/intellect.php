@@ -1,21 +1,38 @@
 <?php
 
-$repositoryOwner = 'thedoggybrad'; // Replace with your repository owner
-$repositoryName = 'easylist-mirror'; // Replace with your repository name
-$workflowName = 'updater.yml'; // Replace with your workflow name
+// Replace with your repository owner, repository name, and workflow name
+$repositoryOwner = 'thedoggybrad';
+$repositoryName = 'easylist-mirror';
+$workflowName = 'updater.yml';
+
+// GitHub Personal Access Token with repo scope (replace with your actual token)
 $token = $_ENV['SUSI_NIYA'];
 
+// Username and Password for basic authentication (replace with your desired username and password)
+$username = 'admin';
+$password = 'adenium101';
+
+// Check if username and password are provided in the request
+if (!isset($_SERVER['PHP_AUTH_USER']) || $_SERVER['PHP_AUTH_USER'] !== $username || $_SERVER['PHP_AUTH_PW'] !== $password) {
+    header('WWW-Authenticate: Basic realm="GitHub Workflow Trigger"');
+    header('HTTP/1.0 401 Unauthorized');
+    echo 'Authentication required.';
+    exit;
+}
+
+// GitHub API URLs
 $apiUrl = "https://api.github.com/repos/{$repositoryOwner}/{$repositoryName}/actions/workflows";
 $workflowUrl = "{$apiUrl}/{$workflowName}/dispatches";
-
 $commitUrl = "https://api.github.com/repos/{$repositoryOwner}/{$repositoryName}/commits?per_page=1";
+
+// Retrieve the last commit information
 $ch = curl_init($commitUrl);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, [
     'Authorization: Bearer ' . $token,
     'Content-Type: application/json',
     'Accept: application/vnd.github.v3+json',
-    'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36' // Replace with your User-Agent header value
+    'User-Agent: Your-App-Name' // Replace with your User-Agent header value
 ]);
 
 $result = curl_exec($ch);
@@ -24,13 +41,14 @@ curl_close($ch);
 
 if ($httpCode === 200) {
     $commits = json_decode($result, true);
+
     if (!empty($commits)) {
         $lastCommitTimestamp = strtotime($commits[0]['commit']['committer']['date']);
         $currentTimestamp = time();
         $timeDiffMinutes = round(($currentTimestamp - $lastCommitTimestamp) / 60);
 
         if ($timeDiffMinutes >= 17) {
-            // The last commit is 17 minutes ago or higher, proceed with triggering the workflow
+            // Trigger the workflow
             $payload = json_encode([
                 'ref' => 'main', // Replace with the desired branch or commit reference
                 'inputs' => (object) [], // Ensure that inputs is an object, even if empty
@@ -44,7 +62,7 @@ if ($httpCode === 200) {
                 'Authorization: Bearer ' . $token,
                 'Content-Type: application/json',
                 'Accept: application/vnd.github.v3+json',
-                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36' // Replace with your User-Agent header value
+                'User-Agent: Your-App-Name' // Replace with your User-Agent header value
             ]);
 
             $result = curl_exec($ch);
@@ -52,9 +70,9 @@ if ($httpCode === 200) {
             curl_close($ch);
 
             if ($httpCode === 204) {
-                echo "Okay! Workflow run successfully triggered.\n";
+                echo "Workflow run successfully triggered.\n";
             } else {
-                echo "Oh! Failed to trigger workflow run. HTTP code: {$httpCode}\n";
+                echo "Failed to trigger workflow run. HTTP code: {$httpCode}\n";
                 echo "Response: {$result}\n";
             }
         } else {
@@ -67,3 +85,4 @@ if ($httpCode === 200) {
     echo "Failed to retrieve commit information. HTTP code: {$httpCode}\n";
     echo "Response: {$result}\n";
 }
+?>
