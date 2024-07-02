@@ -47,8 +47,8 @@ if ($httpCode === 200) {
         $currentTimestamp = time();
         $timeDiffMinutes = round(($currentTimestamp - $lastCommitTimestamp) / 60);
 
-        if ($timeDiffMinutes >= 17) {
-            // Trigger the workflow
+        if ($timeDiffMinutes >= 1) {
+            // Just a safeguard to prevent an accidental failure and multiple syncing workflows at once (but still not perfect)
             $payload = json_encode([
                 'ref' => 'main', // Replace with the desired branch or commit reference
                 'inputs' => (object) [], // Ensure that inputs is an object, even if empty
