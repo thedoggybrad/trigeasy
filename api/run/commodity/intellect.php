@@ -76,7 +76,7 @@ if ($httpCode === 200) {
                 echo "Response: {$result}\n";
             }
         } else {
-            echo "The last commit is not 17 minutes ago or higher.\n";
+            echo "The last commit is not 1 minute ago or higher.\n";
         }
     } else {
         echo "No commits found in the repository.\n";
