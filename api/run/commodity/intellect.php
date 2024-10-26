@@ -25,46 +25,68 @@ $apiUrl = "https://api.github.com/repos/{$repositoryOwner}/{$repositoryName}/act
 $workflowUrl = "{$apiUrl}/{$workflowName}/dispatches";
 $commitUrl = "https://api.github.com/repos/{$repositoryOwner}/{$repositoryName}/commits?per_page=1";
 
-// Function to make HTTP requests
+// Function to make HTTP requests using stream_socket_client
 function makeRequest($url, $token, $method = 'GET', $data = null) {
-    $opts = [
-        "http" => [
-            "method" => $method,
-            "header" => [
-                "Authorization: Bearer $token",
-                "Content-Type: application/json",
-                "Accept: application/vnd.github.v3+json",
-                "User-Agent: Your-App-Name" // Replace with your User-Agent header value
-            ],
-            "content" => $data ? json_encode($data) : null,
-            "ignore_errors" => true, // Capture responses even for non-200 status codes
-        ],
+    $parsedUrl = parse_url($url);
+    $host = $parsedUrl['host'];
+    $path = $parsedUrl['path'] . (isset($parsedUrl['query']) ? '?' . $parsedUrl['query'] : '');
+
+    $headers = [
+        "Authorization: Bearer $token",
+        "Content-Type: application/json",
+        "Accept: application/vnd.github.v3+json",
+        "User-Agent: Your-App-Name", // Replace with your User-Agent header value
+        "Connection: close"
     ];
-    $context = stream_context_create($opts);
-    return file_get_contents($url, false, $context);
+
+    if ($method === 'POST') {
+        $headers[] = "Content-Length: " . strlen($data);
+    }
+
+    $headerString = implode("\r\n", $headers);
+    $fp = stream_socket_client("ssl://$host:443", $errno, $errstr);
+
+    if (!$fp) {
+        echo "Error: $errstr ($errno)\n";
+        return false;
+    }
+
+    $request = "$method $path HTTP/1.1\r\n" .
+               $headerString . "\r\n\r\n" .
+               ($data ? $data : '');
+
+    fwrite($fp, $request);
+    $response = '';
+
+    while (!feof($fp)) {
+        $response .= fread($fp, 1024);
+    }
+    fclose($fp);
+
+    return $response;
 }
 
 // Retrieve the last commit information
 $result = makeRequest($commitUrl, $token);
 
 if ($result === false) {
-    echo "Failed to retrieve commit information. Error: " . error_get_last()['message'] . "\n";
+    echo "Failed to retrieve commit information.\n";
     exit;
 }
 
-// Check the HTTP response code
+// Split the response into headers and body
+list($headers, $body) = explode("\r\n\r\n", $result, 2);
 $httpCode = null;
-if (isset($http_response_header)) {
-    foreach ($http_response_header as $header) {
-        if (preg_match('{HTTP\/\S*\s(\d{3})}', $header, $match)) {
-            $httpCode = (int)$match[1];
-            break;
-        }
+
+foreach (explode("\r\n", $headers) as $header) {
+    if (preg_match('{HTTP\/\S*\s(\d{3})}', $header, $match)) {
+        $httpCode = (int)$match[1];
+        break;
     }
 }
 
 if ($httpCode === 200) {
-    $commits = json_decode($result, true);
+    $commits = json_decode($body, true);
 
     if (!empty($commits)) {
         $lastCommitTimestamp = strtotime($commits[0]['commit']['committer']['date']);
@@ -78,14 +100,14 @@ if ($httpCode === 200) {
                 'inputs' => (object) [], // Ensure that inputs is an object, even if empty
             ];
 
-            $result = makeRequest($workflowUrl, $token, 'POST', $payload);
+            $result = makeRequest($workflowUrl, $token, 'POST', json_encode($payload));
+            list($headers, $body) = explode("\r\n\r\n", $result, 2);
             $httpCode = null;
-            if (isset($http_response_header)) {
-                foreach ($http_response_header as $header) {
-                    if (preg_match('{HTTP\/\S*\s(\d{3})}', $header, $match)) {
-                        $httpCode = (int)$match[1];
-                        break;
-                    }
+
+            foreach (explode("\r\n", $headers) as $header) {
+                if (preg_match('{HTTP\/\S*\s(\d{3})}', $header, $match)) {
+                    $httpCode = (int)$match[1];
+                    break;
                 }
             }
 
@@ -93,7 +115,7 @@ if ($httpCode === 200) {
                 echo "Workflow run successfully triggered.\n";
             } else {
                 echo "Failed to trigger workflow run. HTTP code: {$httpCode}\n";
-                echo "Response: {$result}\n";
+                echo "Response: {$body}\n";
             }
         } else {
             echo "The last commit is not 1 minute ago or higher.\n";
@@ -103,6 +125,6 @@ if ($httpCode === 200) {
     }
 } else {
     echo "Failed to retrieve commit information. HTTP code: {$httpCode}\n";
-    echo "Response: {$result}\n";
+    echo "Response: {$body}\n";
 }
 ?>
