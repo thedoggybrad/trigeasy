@@ -52,8 +52,18 @@ if ($result === false) {
     exit;
 }
 
-$httpCode = $http_response_header[0]; // Access the HTTP response header
-if (strpos($httpCode, '200') !== false) {
+// Check the HTTP response code
+$httpCode = null;
+if (isset($http_response_header)) {
+    foreach ($http_response_header as $header) {
+        if (preg_match('{HTTP\/\S*\s(\d{3})}', $header, $match)) {
+            $httpCode = (int)$match[1];
+            break;
+        }
+    }
+}
+
+if ($httpCode === 200) {
     $commits = json_decode($result, true);
 
     if (!empty($commits)) {
@@ -69,9 +79,17 @@ if (strpos($httpCode, '200') !== false) {
             ];
 
             $result = makeRequest($workflowUrl, $token, 'POST', $payload);
-            $httpCode = $http_response_header[0];
+            $httpCode = null;
+            if (isset($http_response_header)) {
+                foreach ($http_response_header as $header) {
+                    if (preg_match('{HTTP\/\S*\s(\d{3})}', $header, $match)) {
+                        $httpCode = (int)$match[1];
+                        break;
+                    }
+                }
+            }
 
-            if (strpos($httpCode, '204') !== false) {
+            if ($httpCode === 204) {
                 echo "Workflow run successfully triggered.\n";
             } else {
                 echo "Failed to trigger workflow run. HTTP code: {$httpCode}\n";
