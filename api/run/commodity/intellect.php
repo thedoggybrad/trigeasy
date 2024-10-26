@@ -25,21 +25,30 @@ $apiUrl = "https://api.github.com/repos/{$repositoryOwner}/{$repositoryName}/act
 $workflowUrl = "{$apiUrl}/{$workflowName}/dispatches";
 $commitUrl = "https://api.github.com/repos/{$repositoryOwner}/{$repositoryName}/commits?per_page=1";
 
+// Function to make HTTP requests
+function makeRequest($url, $token, $method = 'GET', $data = null) {
+    $opts = [
+        "http" => [
+            "method" => $method,
+            "header" => [
+                "Authorization: Bearer $token",
+                "Content-Type: application/json",
+                "Accept: application/vnd.github.v3+json",
+                "User-Agent: Your-App-Name" // Replace with your User-Agent header value
+            ],
+            "content" => $data ? json_encode($data) : null,
+            "ignore_errors" => true, // Get response even if status code is not 200
+        ],
+    ];
+    $context = stream_context_create($opts);
+    return file_get_contents($url, false, $context);
+}
+
 // Retrieve the last commit information
-$ch = curl_init($commitUrl);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    'Authorization: Bearer ' . $token,
-    'Content-Type: application/json',
-    'Accept: application/vnd.github.v3+json',
-    'User-Agent: Your-App-Name' // Replace with your User-Agent header value
-]);
+$result = makeRequest($commitUrl, $token);
+$httpCode = $http_response_header[0];
 
-$result = curl_exec($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
-if ($httpCode === 200) {
+if (strpos($httpCode, '200') !== false) {
     $commits = json_decode($result, true);
 
     if (!empty($commits)) {
@@ -48,28 +57,16 @@ if ($httpCode === 200) {
         $timeDiffMinutes = round(($currentTimestamp - $lastCommitTimestamp) / 60);
 
         if ($timeDiffMinutes >= 1) {
-            // Just a safeguard to prevent an accidental failure and multiple syncing workflows at once (but still not perfect)
-            $payload = json_encode([
+            // Just a safeguard to prevent an accidental failure and multiple syncing workflows at once
+            $payload = [
                 'ref' => 'main', // Replace with the desired branch or commit reference
                 'inputs' => (object) [], // Ensure that inputs is an object, even if empty
-            ]);
+            ];
 
-            $ch = curl_init($workflowUrl);
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $token,
-                'Content-Type: application/json',
-                'Accept: application/vnd.github.v3+json',
-                'User-Agent: Your-App-Name' // Replace with your User-Agent header value
-            ]);
+            $result = makeRequest($workflowUrl, $token, 'POST', $payload);
+            $httpCode = $http_response_header[0];
 
-            $result = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode === 204) {
+            if (strpos($httpCode, '204') !== false) {
                 echo "Workflow run successfully triggered.\n";
             } else {
                 echo "Failed to trigger workflow run. HTTP code: {$httpCode}\n";
