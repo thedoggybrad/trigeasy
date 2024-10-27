@@ -8,7 +8,7 @@ $workflowName = 'updater.yml';
 // GitHub Personal Access Token with repo scope (replace with your actual token)
 $token = $_ENV['SUSI_NIYA'];
 
-// Username and Password for basic authentication (replace with your desired username and password)
+// Username and Password for basic authentication
 $username = 'admin';
 $password = 'adenium101';
 
@@ -25,19 +25,26 @@ $apiUrl = "https://api.github.com/repos/{$repositoryOwner}/{$repositoryName}/act
 $workflowUrl = "{$apiUrl}/{$workflowName}/dispatches";
 $commitUrl = "https://api.github.com/repos/{$repositoryOwner}/{$repositoryName}/commits?per_page=1";
 
-// Retrieve the last commit information
-$ch = curl_init($commitUrl);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    'Authorization: Bearer ' . $token,
-    'Content-Type: application/json',
-    'Accept: application/vnd.github.v3+json',
-    'User-Agent: Your-App-Name' // Replace with your User-Agent header value
-]);
+// Function to perform a GET request
+function getRequest($url, $token) {
+    $options = [
+        "http" => [
+            "header" => [
+                "Authorization: Bearer $token",
+                "Content-Type: application/json",
+                "Accept: application/vnd.github.v3+json",
+                "User-Agent: Your-App-Name" // Replace with your User-Agent header value
+            ]
+        ]
+    ];
 
-$result = curl_exec($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
+    $context = stream_context_create($options);
+    return file_get_contents($url, false, $context);
+}
+
+// Retrieve the last commit information
+$result = getRequest($commitUrl, $token);
+$httpCode = $result === false ? 500 : 200; // Simple error handling
 
 if ($httpCode === 200) {
     $commits = json_decode($result, true);
@@ -48,26 +55,34 @@ if ($httpCode === 200) {
         $timeDiffMinutes = round(($currentTimestamp - $lastCommitTimestamp) / 60);
 
         if ($timeDiffMinutes >= 1) {
-            // Just a safeguard to prevent an accidental failure and multiple syncing workflows at once (but still not perfect)
+            // Safeguard to prevent accidental failures
             $payload = json_encode([
                 'ref' => 'main', // Replace with the desired branch or commit reference
-                'inputs' => (object) [], // Ensure that inputs is an object, even if empty
+                'inputs' => (object) [],
             ]);
 
-            $ch = curl_init($workflowUrl);
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $token,
-                'Content-Type: application/json',
-                'Accept: application/vnd.github.v3+json',
-                'User-Agent: Your-App-Name' // Replace with your User-Agent header value
-            ]);
+            // Function to perform a POST request
+            function postRequest($url, $payload, $token) {
+                $options = [
+                    "http" => [
+                        "header" => [
+                            "Authorization: Bearer $token",
+                            "Content-Type: application/json",
+                            "Accept: application/vnd.github.v3+json",
+                            "User-Agent: Your-App-Name" // Replace with your User-Agent header value
+                        ],
+                        "method" => "POST",
+                        "content" => $payload
+                    ]
+                ];
 
-            $result = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
+                $context = stream_context_create($options);
+                return file_get_contents($url, false, $context);
+            }
+
+            // Trigger the workflow
+            $result = postRequest($workflowUrl, $payload, $token);
+            $httpCode = $result === false ? 500 : 204; // Simplified HTTP status handling
 
             if ($httpCode === 204) {
                 echo "Workflow run successfully triggered.\n";
