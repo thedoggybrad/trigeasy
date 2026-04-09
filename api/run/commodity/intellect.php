@@ -33,7 +33,7 @@ function getRequest($url, $token) {
                 "Authorization: Bearer $token",
                 "Content-Type: application/json",
                 "Accept: application/vnd.github.v3+json",
-                "User-Agent: Your-App-Name" // Replace with your User-Agent header value
+                "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36" 
             ]
         ]
     ];
@@ -54,7 +54,7 @@ if ($httpCode === 200) {
         $currentTimestamp = time();
         $timeDiffMinutes = round(($currentTimestamp - $lastCommitTimestamp) / 60);
 
-        if ($timeDiffMinutes >= 1) {
+        if ($timeDiffMinutes >= 2) {
             // Safeguard to prevent accidental failures
             $payload = json_encode([
                 'ref' => 'main', // Replace with the desired branch or commit reference
